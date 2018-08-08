@@ -45,6 +45,27 @@ PyCFunction_NewEx(PyMethodDef *ml, PyObject *self, PyObject *module)
     op->m_self = self;
     Py_XINCREF(module);
     op->m_module = module;
+    switch (ml->ml_flags) {
+      case METH_NOARGS:
+        op->m_entry = PyCFunction_NoArgEntry;
+        break;
+      case METH_O:
+        op->m_entry = PyCFunction_OneArgEntry;
+        break;
+      case METH_KEYWORDS | METH_VARARGS:
+        op->m_entry = PyCFunction_KwArgsEntry;
+        break;
+      case METH_VARARGS:
+        op->m_entry = PyCFunction_VarArgsEntry;
+        break;
+      case METH_FASTCALL:
+        op->m_entry = PyCFunction_FastCallEntry;
+        break;
+      default:
+        /* TODO: invariant: m_entry != NULL */
+        op->m_entry = NULL;
+        break;
+    }
     _PyObject_GC_TRACK(op);
     return (PyObject *)op;
 }

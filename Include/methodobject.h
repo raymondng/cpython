@@ -24,6 +24,29 @@ typedef PyObject *(*_PyCFunctionFastWithKeywords) (PyObject *,
                                                    PyObject *);
 typedef PyObject *(*PyNoArgsFunction)(PyObject *);
 
+
+typedef PyObject* (*PyCFunction_Entry)(PyObject* func_obj, PyObject** args,
+                                       Py_ssize_t nargs, PyObject* kwargs);
+
+PyObject* PyCFunction_NoArgEntry(PyObject* func_obj, PyObject** args,
+                                 Py_ssize_t nargs, PyObject* kwargs);
+
+PyObject* PyCFunction_OneArgEntry(PyObject* func_obj, PyObject** args,
+                                  Py_ssize_t nargs, PyObject* kwargs);
+
+PyObject* PyCFunction_VarArgsEntry(PyObject* func_obj, PyObject** args,
+                                   Py_ssize_t nargs, PyObject* kwargs);
+
+PyObject* PyCFunction_FastCallEntry(PyObject* func_obj,
+                                    PyObject *const *args,
+                                    Py_ssize_t nargs,
+                                    PyObject *kwargs);
+
+PyObject* PyCFunction_KwArgsEntry(PyObject* func_obj,
+                                  PyObject *const *stack,
+                                  Py_ssize_t nargs,
+                                  PyObject *kwnames);
+
 PyAPI_FUNC(PyCFunction) PyCFunction_GetFunction(PyObject *);
 PyAPI_FUNC(PyObject *) PyCFunction_GetSelf(PyObject *);
 PyAPI_FUNC(int) PyCFunction_GetFlags(PyObject *);
@@ -105,6 +128,7 @@ typedef struct {
     PyObject    *m_self; /* Passed as 'self' arg to the C func, can be NULL */
     PyObject    *m_module; /* The __module__ attribute, can be anything */
     PyObject    *m_weakreflist; /* List of weak references */
+    PyCFunction_Entry m_entry; /* Function entry point */
 } PyCFunctionObject;
 
 PyAPI_FUNC(PyObject *) _PyMethodDef_RawFastCallDict(

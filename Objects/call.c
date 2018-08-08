@@ -442,6 +442,130 @@ _PyFunction_FastCallKeywords(PyObject *func, PyObject *const *stack,
 
 /* --- PyCFunction call functions --------------------------------- */
 
+PyObject*
+PyCFunction_NoArgEntry(PyObject* func_obj, PyObject** args,
+                       Py_ssize_t nargs, PyObject* kwargs)
+{
+    PyCFunctionObject *func = (PyCFunctionObject*)func_obj;
+    PyCFunction meth = PyCFunction_GET_FUNCTION(func);
+    PyObject *self = PyCFunction_GET_SELF(func);
+    PyObject *result;
+    if (kwargs != NULL && PyDict_Size(kwargs) != 0) {
+        PyErr_Format(PyExc_TypeError, "%.200s() takes no keyword arguments",
+                     func->m_ml->ml_name);
+        return NULL;
+    }
+    if (nargs != 0) {
+        PyErr_Format(PyExc_TypeError,
+                     "%.200s() takes no arguments (%zd given)",
+                     func->m_ml->ml_name, nargs);
+        return NULL;
+    }
+    result = (*meth)(self, NULL);
+    result = _Py_CheckFunctionResult(func_obj, result, NULL);
+    return result;
+}
+
+PyObject*
+PyCFunction_OneArgEntry(PyObject* func_obj, PyObject** args,
+                        Py_ssize_t nargs, PyObject* kwargs)
+{
+    PyCFunctionObject *func = (PyCFunctionObject*)func_obj;
+    PyCFunction meth = PyCFunction_GET_FUNCTION(func);
+    PyObject *self = PyCFunction_GET_SELF(func);
+    PyObject *result;
+    if (kwargs != NULL && PyDict_Size(kwargs) != 0) {
+        PyErr_Format(PyExc_TypeError, "%.200s() takes no keyword arguments",
+                     func->m_ml->ml_name);
+        return NULL;
+    }
+
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError,
+                     "%.200s() takes exactly one argument (%zd given)",
+                     func->m_ml->ml_name, nargs);
+        return NULL;
+    }
+
+    result = (*meth) (self, args[0]);
+    result = _Py_CheckFunctionResult(func_obj, result, NULL);
+    return result;
+}
+
+PyObject*
+PyCFunction_VarArgsEntry(PyObject* func_obj, PyObject** args,
+                         Py_ssize_t nargs, PyObject* kwargs)
+{
+    PyCFunctionObject *func = (PyCFunctionObject*)func_obj;
+    PyCFunction meth = PyCFunction_GET_FUNCTION(func);
+    PyObject *self = PyCFunction_GET_SELF(func);
+    PyObject *result;
+    /* Slow-path: create a temporary tuple */
+    PyObject *tuple;
+    if (kwargs != NULL && PyDict_Size(kwargs) != 0) {
+        PyErr_Format(PyExc_TypeError,
+                     "%.200s() takes no keyword arguments",
+                     func->m_ml->ml_name);
+        return NULL;
+    }
+    tuple = _PyStack_AsTuple(args, nargs);
+    if (tuple == NULL) {
+        return NULL;
+    }
+    result = (*meth) (self, tuple);
+    Py_DECREF(tuple);
+    result = _Py_CheckFunctionResult(func_obj, result, NULL);
+    return result;
+}
+
+PyObject*
+PyCFunction_FastCallEntry(PyObject* func_obj,
+                          PyObject *const *args,
+                          Py_ssize_t nargs,
+                          PyObject *kwargs)
+{
+    PyCFunctionObject *func = (PyCFunctionObject*)func_obj;
+    PyCFunction meth = PyCFunction_GET_FUNCTION(func);
+    PyObject *self = PyCFunction_GET_SELF(func);
+    PyObject *result;
+    PyObject **stack;
+    PyObject *kwnames;
+    _PyCFunctionFast fastmeth = (_PyCFunctionFast)meth;
+    if (_PyStack_UnpackDict(args, nargs, kwargs, &stack, &kwnames) < 0) {
+        return NULL;
+    }
+    result = (*fastmeth) (self, stack, nargs);
+    if (stack != args) {
+        PyMem_Free(stack);
+    }
+    Py_XDECREF(kwnames);
+    result = _Py_CheckFunctionResult(func_obj, result, NULL);
+    return result;
+}
+
+PyObject*
+PyCFunction_KwArgsEntry(PyObject* func_obj,
+                        PyObject *const *stack,
+                        Py_ssize_t nargs,
+                        PyObject *kwnames)
+{
+    PyCFunctionObject *func = (PyCFunctionObject*)func_obj;
+    PyCFunction meth = PyCFunction_GET_FUNCTION(func);
+    PyObject *self = PyCFunction_GET_SELF(func);
+    PyObject *result;
+    /* Slow-path: create a temporary tuple */
+    PyObject *tuple;
+    tuple = _PyStack_AsTuple(stack, nargs);
+    if (tuple == NULL) {
+        return NULL;
+    }
+    result = (*(PyCFunctionWithKeywords)meth) (self, tuple, kwnames);
+    Py_DECREF(tuple);
+    result = _Py_CheckFunctionResult(func_obj, result, NULL);
+    return result;
+}
+
+
 PyObject *
 _PyMethodDef_RawFastCallDict(PyMethodDef *method, PyObject *self,
                              PyObject *const *args, Py_ssize_t nargs,
@@ -578,6 +702,11 @@ _PyCFunction_FastCallDict(PyObject *func,
 
     assert(func != NULL);
     assert(PyCFunction_Check(func));
+
+    PyCFunctionObject* cfunc = (PyCFunctionObject*)func;
+    if (cfunc->m_entry != NULL) { /* TODO: remove NULL-check */
+        return (*cfunc->m_entry)(func, args, nargs, kwargs);
+    }
 
     result = _PyMethodDef_RawFastCallDict(((PyCFunctionObject*)func)->m_ml,
                                           PyCFunction_GET_SELF(func),
